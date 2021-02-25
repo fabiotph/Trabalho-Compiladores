@@ -7,7 +7,7 @@ var column = 1
 var grammar = {
     "bnf": {
         //programa e bloco
-        "<programa>" :[[ "PROGRAM IDENTIFICADOR PONTO_E_VIRGULA <bloco> PONTO", "console.log('programa')" ]],
+        "<programa>" :[[ "PROGRAM IDENTIFICADOR PONTO_E_VIRGULA <bloco> PONTO", "console.log(this)" ]],
         "<bloco>" : [[ "<parte_de_declarações_de_variáveis> <bloco_1>", "" ],
                     [ "<parte_de_declarações_de_subrotinas> <comando_composto>", "" ],
                     [ "<comando_composto>", "" ]],
@@ -18,12 +18,12 @@ var grammar = {
         "<parte_de_declarações_de_variáveis>" :[[ "<declaração_de_variáveis> PONTO_E_VIRGULA <parte_de_declarações_de_variáveis_1>", "" ]],
         "<parte_de_declarações_de_variáveis_1>" :[[ "<declaração_de_variáveis> PONTO_E_VIRGULA <parte_de_declarações_de_variáveis_1>", "" ],
                                                      ["", ""]],
-        "<declaração_de_variáveis>" :[[ "<tipo_simples> <lista_de_identificadores>", "" ]],
+        "<declaração_de_variáveis>" :[[ "<tipo_simples> <lista_de_identificadores>", `console.log($1)` ]],
         "<tipo_simples>": [[ "INT", "" ],
                              ["REAL", ""],
                              ["BOOLEAN", ""]],
-        "<lista_de_identificadores>": [[ "IDENTIFICADOR <lista_de_identificadores_1>", "" ]],
-        "<lista_de_identificadores_1>": [["VIRGULA IDENTIFICADOR <lista_de_identificadores_1>", ""],
+        "<lista_de_identificadores>": [[ "IDENTIFICADOR <lista_de_identificadores_1>", "test($1)" ]],
+        "<lista_de_identificadores_1>": [["VIRGULA IDENTIFICADOR <lista_de_identificadores_1>", "test($2)"],
                                          ["", ""]],
          "<parte_de_declarações_de_subrotinas>": [["<declaração_de_procedimento> PONTO_E_VIRGULA <parte_de_declarações_de_subrotinas_1>", ""]],
          "<parte_de_declarações_de_subrotinas_1>": [["<declaração_de_procedimento> PONTO_E_VIRGULA", ""],
@@ -37,7 +37,7 @@ var grammar = {
                                          ["<lista_de_identificadores> DOIS_PONTOS <tipo_simples>", ""]],
         
         //comandos
-        "<comando_composto>": [["COMANDO_BEGIN <comando> <comando_composto_1> COMANDO_END", ""]],
+        "<comando_composto>": [["COMANDO_BEGIN <comando> <comando_composto_1> COMANDO_END", "console.log('NOVO ESCOPO')"]],
         "<comando_composto_1>": [["", ""],
                                  ["PONTO_E_VIRGULA <comando> <comando_composto_1>", ""]],
         "<comando>": [["<atribuição>", ""],
@@ -50,7 +50,7 @@ var grammar = {
          "<chamada_de_procedimento_1>": [["ABR_PARENT <lista_de_expressões> FECH_PARENT", ""],
                                          ["",""]],
          "<comando_condicional>": [["COMANDO_IF <expressão> COMANDO_THEN <comando> <comando_condicional_1>", ""]],
-         "<comando_condicional_1>": [["COMANDO_ELSE <comando>", ""],
+         "<comando_condicional_1>": [["COMANDO_ELSE <comando>", "console.log('ELSE')"],
                                     ["", ""]],
          "<comando_repetitivo>": [["COMANDO_WHILE <expressão> COMANDO_DO <comando>", ""]],
         "<expressão>": [["<expressão_simples> <expressão_1>", ""]],
@@ -84,6 +84,11 @@ var grammar = {
         "<lista_de_expressões>": [["<expressão> <lista_de_expressões_1>", ""]],
         "<lista_de_expressões_1>": [["", ""],
                                     ["VIRGULA <expressão> <lista_de_expressões_1>", ""]]
+    },
+    actionInclude: function () {
+        function test(val) {
+            console.log(val)
+        }
     }
 };
 
@@ -91,6 +96,7 @@ var parser = new Parser(grammar);
 var lexer = parser.lexer = new Lexer(function (char) {
     console.log("err")
 });
+
 
 // lexer.addRule(/\s+/, function () {});
 
@@ -103,7 +109,7 @@ var result = []
 let _addResult = (lexeme, token, line, currentColumn, error = null) => {
     let initColumn = currentColumn
     column += lexeme.length - 1
-    console.log(error)
+    //console.log(error)
     result.push({
         "lexeme": lexeme,
         "token": token,
@@ -123,230 +129,541 @@ lexer.addRule(/\/\/([^\n])*/i, (lexeme) => {column += lexeme.length - 1})
 lexer.addRule(/\{(\w|\W)*\}/i, (lexeme) => {column += lexeme.length - 1})
 
 lexer.addRule(/program/, function(lexeme) {
-    this.yytext = "PROGRAM";
+    this.yytext = "PROGRAMA";
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
+    console.log(this.yyloc)
+
+
     _addResult("PROGRAM", "PROGRAM", line, column)
     return "PROGRAM"
 })
 
+
 lexer.addRule(/;/, function(lexeme){
     _addResult(lexeme, "PONTO_E_VIRGULA", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
+
+
     return "PONTO_E_VIRGULA"
 })
 
 lexer.addRule(/\./, function(lexeme){
     _addResult(lexeme, "PONTO", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "PONTO"
 })
 
 lexer.addRule(/:=/, function(lexeme){
     _addResult(lexeme, "ATRIBUIÇÃO", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "ATRIBUIÇÃO"
 })
 
 lexer.addRule(/\:/, function(lexeme){
     _addResult(lexeme, "DOIS_PONTOS", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "DOIS_PONTOS"
 })
 
 lexer.addRule(/,/, function(lexeme){
     _addResult(lexeme, "VIRGULA", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "VIRGULA"
 })
 
 lexer.addRule(/var/, function(lexeme){
     _addResult(lexeme, "VAR", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "VAR"
 })
 
 lexer.addRule(/begin/, function(lexeme){
     _addResult(lexeme, "COMANDO_BEGIN", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_BEGIN"
 })
 
 lexer.addRule(/end/, function(lexeme){
     _addResult(lexeme, "COMANDO_END", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_END"
 })
 
 lexer.addRule(/if/, function(lexeme){
     _addResult(lexeme, "COMANDO_IF", line, column)
+
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_IF"
 })
 
 lexer.addRule(/then/, function(lexeme){
     _addResult(lexeme, "COMANDO_THEN", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_THEN"
 })
 
 lexer.addRule(/else/, function(lexeme){
     _addResult(lexeme, "COMANDO_ELSE", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_ELSE"
 })
 
 lexer.addRule(/while/, function(lexeme){
     _addResult(lexeme, "COMANDO_WHILE", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_WHILE"
 })
 
 lexer.addRule(/do/, function(lexeme){
     _addResult(lexeme, "COMANDO_DO", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "COMANDO_DO"
 })
 
 lexer.addRule(/procedure/, function(lexeme){
     _addResult(lexeme, "PROCEDURE", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "PROCEDURE"
 })
 
 lexer.addRule(/and/, function(lexeme){
     _addResult(lexeme, "OP_AND", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_AND"
 })
 
 lexer.addRule(/or/, function(lexeme){
     _addResult(lexeme, "OP_OR", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_OR"
 })
 
 lexer.addRule(/div/, function(lexeme){
     _addResult(lexeme, "OP_DIV", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_DIV"
 })
 
 lexer.addRule(/not/, function(lexeme){
     _addResult(lexeme, "OP_NOT", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_NOT"
 })
 
 lexer.addRule(/\(/, function(lexeme){
     _addResult(lexeme, "ABR_PARENT", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "ABR_PARENT"
 })
 
 lexer.addRule(/\)/, function(lexeme){
     _addResult(lexeme, "FECH_PARENT", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "FECH_PARENT"
 })
 
 lexer.addRule(/\+/, function(lexeme){
     _addResult(lexeme, "OP_SOMA", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_SOMA"
 })
 
 lexer.addRule(/\-/, function(lexeme){
     _addResult(lexeme, "OP_SUBTRAÇÃO", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_SUBTRAÇÃO"
 })
 
 lexer.addRule(/\*/, function(lexeme){
     _addResult(lexeme, "OP_MULTIPLICAÇÃO", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "OP_MULTIPLICAÇÃO"
 })
 
 lexer.addRule(/int/, function(lexeme){
     _addResult(lexeme, "INT", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "INT"
 })
 
 lexer.addRule(/real/, function(lexeme){
     _addResult(lexeme, "REAL", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REAL"
 })
 
 lexer.addRule(/boolean/, function(lexeme){
     _addResult(lexeme, "BOOLEAN", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "BOOLEAN"
 })
 
 lexer.addRule(/>=/, function(lexeme){
     _addResult(lexeme, "REL_MAIOR_IGUAL", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REL_MAIOR_IGUAL"
 })
 
 lexer.addRule(/<=/, function(lexeme){
     _addResult(lexeme, "REL_MENOR_IGUAL", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REL_MENOR_IGUAL"
 })
 
 lexer.addRule(/<>/, function(lexeme){
     _addResult(lexeme, "REL_DIFERENTE", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REL_DIFERENTE"
 })
 
 lexer.addRule(/</, function(lexeme){
     _addResult(lexeme, "REL_MENOR", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REL_MENOR"
 })
 
 lexer.addRule(/=/, function(lexeme){
     _addResult(lexeme, "REL_IGUAL", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REL_IGUAL"
 })
 
 lexer.addRule(/>/, function(lexeme){
     _addResult(lexeme, "REL_MAIOR", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "REL_MAIOR"
 })
 
 lexer.addRule(/[0-9]+(_|[a-z]|[A-Z])((_|[a-z]|[A-Z]|[0-9]))*/, function(lexeme){
     _addResult(lexeme, "ERRO", line, column, erro="Identificador mal formado")
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "ERRO"
 })
 
 lexer.addRule(/(_|[a-z]|[A-Z])((_|[a-z]|[A-Z]|[0-9]))*/, function(lexeme){
     _addResult(lexeme, "IDENTIFICADOR", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "IDENTIFICADOR"
 })
 
 lexer.addRule(/[0-9]{1,10}/, function(lexeme){
     _addResult(lexeme, "NUMERO", line, column)
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "NUMERO"
 })
 
 lexer.addRule(/[0-9]{11,}/, function(lexeme){
     _addResult(lexeme, "ERRO", line, column, error="Estouro de valor inteiro")
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "ERRO"
 })
 
 lexer.addRule(/[^0-9a-zA-Z\+\-\*\/\(\)\{\}\[\]\>\=\<\;\,\.\:\n\s\t]+/, function(lexeme){
     _addResult(lexeme, "ERRO", line, column, error="Lexema desconhecido")
     this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
     return "ERRO"
 })
 

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <script src="./src/lexer.js"></script>
+    <script src="./front.js"></script>
+    <title>Trabalho 1 - Analisador sintático</title>
+</head>
+
+<body>
+    <div>
+        <div class="content-input">
+            <textarea name="" id="input" cols="100" rows="20"></textarea>
+            <div class="content-buttons">
+                <button id="save-file" class="btn">SALVAR ARQUIVO</button>
+                <button id="load-file" class="btn">CARREGAR ARQUIVO</button>
+                <button id="exec" class="btn">EXECUTAR</button>
+            </div>
+        </div>
+        <div>
+            <h3 id="syntatic-result" style="margin-left: 10px;"></h3>
+        </div>
+        <div>
+            <div id="table" class="table">
+                <div class="table-header">
+                    <p>Lexema</p>
+                    <p>Token</p>
+                    <p>Linha</p>
+                    <p>Ini. Coluna</p>
+                    <p>Fim Coluna</p>
+                    <p>Erro</p>
+                </div>
+                <div id="table-body" class="table-body">
+                </div>
+            </div>
+        </div>
+        <div id="content-clone" style="display: none;">
+            <div class="table-row">
+                <p id="lexeme"></p>
+                <p id="token"></p>
+                <p id="line"></p>
+                <p id="init-column"></p>
+                <p id="end-column"></p>
+                <p id="error"></p>
+            </div>
+        </div>
+        <input type="file" id="upload" style="display: none;">
+    </div>
+</body>
+
+</html>

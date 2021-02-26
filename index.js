@@ -8,9 +8,13 @@ class Scope {
     static global = new Scope() 
     static currentScope = this.global
 
-    constructor(parent = null) {
+    constructor(parent = null, type='default') {
         this.variables = {}
         this.procedures = {}
+        this.childScopes = []
+        this.type = type
+
+        if(parent != null) parent.childScopes.push(this)
         
         this.parent = parent
     }
@@ -23,7 +27,16 @@ class Scope {
             type,
             category,
             line,
-            initialized: false
+            initialized: category == 'var' ? false : true
+        }
+    }
+
+    addProcedure(name, params, line) {
+        if(this.variableExists(name)) throw `variable ${name} already defined`
+
+        this.procedures[name] = {
+            line,
+            params
         }
     }
 
@@ -56,6 +69,10 @@ class Scope {
             this.variables[name].initialized = true
             return
         }
+        else if(this.type == 'procedure') {
+            let v = this.getVariable(v)
+            if(v == null) throw `variable '${name}' not defined`
+        }
         else if(this.parent != null) return this.parent.initializeVariable(name)
 
         throw `variable '${name}' not defined`
@@ -65,8 +82,11 @@ class Scope {
         if(this.variables[name]) {
             if(!this.variables[name].initialized) throw `variable ${name} used before initialization`
             return true
+        }else if(this.type == 'procedure') {
+            return true
         }
-        if(this.parent != null) return this.parent.assertVariableInitialized(name, type)
+
+        if(this.parent != null) return this.parent.assertVariableInitialized(name)
 
         throw `variable '${name}' not defined`
     }
@@ -74,7 +94,6 @@ class Scope {
     assertTypeCheck(name, type) {
         if(this.variables[name]) {
             if(this.variables[name].type != type) throw `expected '${this.variables[name].type}', found '${type}'`
-            console.log(type)
             return
         }
         if(this.parent != null) return this.parent.assertTypeCheck(name, type)
@@ -82,9 +101,9 @@ class Scope {
         throw `variable '${name}' not defined`
     }
 
-    static newScope() {
+    static newScope(type = 'default') {
         if(this.currentScope == null) this.currentScope = this.global
-        else this.currentScope = new Scope(this.currentScope)
+        else this.currentScope = new Scope(this.currentScope, type)
     }
 
     static prevScope() {
@@ -122,16 +141,16 @@ var grammar = {
          "<parte_de_declarações_de_subrotinas>": [["<declaração_de_procedimento> PONTO_E_VIRGULA <parte_de_declarações_de_subrotinas_1>", ""]],
          "<parte_de_declarações_de_subrotinas_1>": [["<declaração_de_procedimento> PONTO_E_VIRGULA", ""],
                                                   ["", ""]],
-         "<procedure>": [["PROCEDURE", "newScope()"]],
-         "<declaração_de_procedimento>": [["<procedure> IDENTIFICADOR PONTO_E_VIRGULA <bloco>", ""],
-                                         ["<procedure> IDENTIFICADOR <parâmetros_formais> PONTO_E_VIRGULA <bloco>", ""]],
+         "<procedure>": [["PROCEDURE IDENTIFICADOR PONTO_E_VIRGULA", "newScope(this['_$'].first_line, $2, 'procedure')"],
+                        ["PROCEDURE IDENTIFICADOR <parâmetros_formais> PONTO_E_VIRGULA", "newScope(this['_$'].first_line, $2, 'procedure')"]],
+         "<declaração_de_procedimento>": [["<procedure> <bloco>", "endScope()"]],
          "<parâmetros_formais>": [["ABR_PARENT <seção_de_parâmetros_formais> <parâmetros_formais_1> FECH_PARENT", ""]],
          "<parâmetros_formais_1>": [["", ""],
                                      ["PONTO_E_VIRGULA <seção_de_parâmetros_formais> <parâmetros_formais_1>", ""]],
-         "<seção_de_parâmetros_formais>": [["VAR <lista_de_identificadores> DOIS_PONTOS <tipo_simples>", ""],
+         "<seção_de_parâmetros_formais>": [["VAR <lista_de_identificadores> DOIS_PONTOS <tipo_simples>", "addParams($4)"],
                                          ["<lista_de_identificadores> DOIS_PONTOS <tipo_simples>", ""]],
         "<begin>": [["COMANDO_BEGIN", ""]],
-        "<end>": [["COMANDO_END", "endScope()"]],
+        "<end>": [["COMANDO_END", ""]],
         //comandos
         "<comando_composto>": [["<begin> <comando> <comando_composto_1> <end>", ""]],
         "<comando_composto_1>": [["", ""],
@@ -141,12 +160,12 @@ var grammar = {
                       ["<comando_composto>", ""],
                       ["<comando_condicional>", ""],
                      ["<comando_repetitivo>", ""]],
-        "<atribuição>": [["IDENTIFICADOR ATRIBUIÇÃO <expressão>", "initializeVariable($1, $3);"]],
+        "<atribuição>": [["IDENTIFICADOR ATRIBUIÇÃO <expressão>", "initializeVariable(this['_$'].first_line, $1, $3);"]],
          "<chamada_de_procedimento>": [["IDENTIFICADOR <chamada_de_procedimento_1>", ""]],
          "<chamada_de_procedimento_1>": [["ABR_PARENT <lista_de_expressões> FECH_PARENT", ""],
                                          ["",""]],
          "<comando_condicional>": [["COMANDO_IF <expressão> COMANDO_THEN <comando> <comando_condicional_1>", ""]],
-         "<comando_condicional_1>": [["COMANDO_ELSE <comando>", "console.log('ELSE')"],
+         "<comando_condicional_1>": [["COMANDO_ELSE <comando>", ""],
                                     ["", ""]],
          "<comando_repetitivo>": [["COMANDO_WHILE <expressão> COMANDO_DO <comando>", ""]],
         "<expressão>": [["<expressão_simples> <expressão_1>", ""]],
@@ -175,7 +194,7 @@ var grammar = {
                      ["BOOLEANO", ""],
                      ["ABR_PARENT <expressão> FECH_PARENT", ""],
                      ["OP_NOT <fator>", ""]],
-        "<variável>": [["IDENTIFICADOR <variável_1>", ""]],
+        "<variável>": [["IDENTIFICADOR <variável_1>", "verifyInitialized(this['_$'].first_line, $1)"]],
         "<variável_1>": [["<expressão>", ""],
                           ["", ""]],
         "<lista_de_expressões>": [["<expressão> <lista_de_expressões_1>", ""]],
@@ -185,17 +204,32 @@ var grammar = {
     actionInclude: function () {
         let variableStack = []
 
-        function test(val) {
-            console.log(val)
-        }
 
         let pushVariableInStack = (name) => {
             arguments[3]['parser'].variableStack.push(name)
         }
         
         let addVariables = (line, type) => {
+            try{
+                while(arguments[3]['parser'].variableStack.length) {
+                    arguments[3]['parser'].Scope.currentScope.addVariable(type, arguments[3]['parser'].variableStack.pop(), line)
+                }
+            }catch(e){
+                arguments[3]['parser'].errorStack.push({
+                    error: e,
+                    line
+                })
+            }
+        }
+
+        let addParams = (type) => {
+            if(!this.procedureParams) this.procedureParams = []
+
             while(arguments[3]['parser'].variableStack.length) {
-                arguments[3]['parser'].Scope.currentScope.addVariable(type, arguments[3]['parser'].variableStack.pop(), line)
+                this.procedureParams.push({
+                    name: arguments[3]['parser'].variableStack.pop(),
+                    type
+                })
             }
         }
 
@@ -204,30 +238,69 @@ var grammar = {
             this.test.push(element)
         }
 
-        let initializeVariable = (name, value) => {
-            let type = "unknown"
-            let v = arguments[3]['parser'].Scope.currentScope.getVariable(name)
-            let variable = arguments[3]['parser'].Scope.currentScope.getVariable(value);
-            if(name != null && value == '-' || value == '+') {
-                type = v.type
-            }else if(value == "true" || value == "false"){
-                type = "boolean"
-            }else if(!isNaN(parseInt(value))) {
-                type = "int"
-            }else if(!isNaN(parseFloat(value))) {
-                type = "real"
-            }else if(arguments[3]['parser'].Scope.currentScope.assertVariableInitialized(value)){
-                console.log(variable)
-                type = variable.type
+        let verifyInitialized = (line, name) => {
+            try{
+                arguments[3]['parser'].Scope.currentScope.assertVariableInitialized(name)
+            }catch(e){
+                arguments[3]['parser'].errorStack.push({
+                    error: e,
+                    line
+                })
             }
-            
-            arguments[3]['parser'].Scope.currentScope.assertTypeCheck(name, type)
-            arguments[3]['parser'].Scope.currentScope.initializeVariable(name)
         }
 
-        let newScope = () => {
-            console.log("BEGIN")
-            arguments[3]['parser'].Scope.newScope()
+        let initializeVariable = (line, name, value) => {
+            let type = "unknown"
+            try{
+                let v = arguments[3]['parser'].Scope.currentScope.getVariable(name)
+                let variable = arguments[3]['parser'].Scope.currentScope.getVariable(value);
+                if(name != null && value == '-' || value == '+') {
+                    type = v.type
+                }else if(value == "true" || value == "false"){
+                    type = "boolean"
+                }else if(!isNaN(parseInt(value))) {
+                    type = "int"
+                }else if(!isNaN(parseFloat(value))) {
+                    type = "real"
+                }else if(variable != null){
+                    type = variable.type
+                }
+
+                arguments[3]['parser'].Scope.currentScope.assertTypeCheck(name, type)
+            }catch(e) {
+                arguments[3]['parser'].errorStack.push({
+                    error: e,
+                    line
+                })
+            }finally{             
+                try{
+                    arguments[3]['parser'].Scope.currentScope.initializeVariable(name)
+                }catch(e) {
+                    arguments[3]['parser'].errorStack.push({
+                        error: e,
+                        line
+                    })
+                }     
+            }
+        }
+
+        let newScope = (line, procedureName, type) => {
+            try{
+                if(!this.procedureParams) this.procedureParams = []
+
+                arguments[3]['parser'].Scope.currentScope.addProcedure(procedureName, this.procedureParams, line)
+                arguments[3]['parser'].Scope.newScope(type)
+                for(param of this.procedureParams) {
+                    arguments[3]['parser'].Scope.currentScope.addVariable(param.type, param.name, line, "param") 
+                } 
+            }catch(e) {
+                arguments[3]['parser'].errorStack.push({
+                    error: e,
+                    line
+                })
+            }finally{
+                this.procedureParams = []
+            }
         }
 
         let endScope = () => {
@@ -238,6 +311,7 @@ var grammar = {
 
 var parser = new Parser(grammar);
 parser.variableStack = []
+parser.errorStack = []
 parser.Scope = Scope
 var lexer = parser.lexer = new Lexer(function (char) {
     console.log("err")
@@ -285,8 +359,6 @@ lexer.addRule(/program/, function(lexeme) {
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
-    console.log(this.yyloc)
-
 
     _addResult("PROGRAM", "PROGRAM", line, column)
     return "PROGRAM"
@@ -861,8 +933,10 @@ function analise_sintatica(value){
         //console.log(value)
         //console.log(parser)
         parser.variableStack = []
+        parser.errorStack = []
         Scope.reset()
         let x = {lexic: result, syntatic: parser.parse(value)};
+        console.log(parser.errorStack)
         console.log(Scope.global)
         return x;
     }

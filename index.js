@@ -4,8 +4,74 @@ var Lexer = require("lex");
 var line = 1
 var column = 1
 
+class Scope {
+    static global = new Scope() 
+    static currentScope = this.global
+
+    constructor(parent = null) {
+        this.variables = {}
+        this.procedures = {}
+        
+        this.parent = parent
+    }
+
+    addVariable(type, name, category = 'var'){
+        if(this.variableExists(name)) throw `variable ${name} already defined`
+
+        this.variables[name] = {
+            name,
+            type,
+            category,
+            initialized: false
+        }
+        console.log(this.variables)
+    }
+
+    variableExists(name, checkParent = false){
+        if(this.variables[name] != undefined) return true;
+
+        if(checkParent && this.parent != null) return this.parent.variableExists(name, checkParent)
+        return false
+    }
+
+    initializeVariable(name) {
+        if(this.variables[name]) {
+            this.variables[name].initialized = true
+            return
+        }
+        else if(this.parent != null) return this.parent.initializeVariable(name)
+
+        throw `variable ${name} initialized but not defined`
+    }
+
+    assertTypeCheck(name, type) {
+        if(this.variables[name]) {
+            if(this.variables[name].type != type) throw `expected ${this.variables[name].type}, found ${type}`
+            return
+        }
+        if(this.parent != null) return this.parent.variableTypeCheck(name, type)
+
+        throw `variable ${name} not defined`
+    }
+
+    static newScope() {
+        if(this.currentScope == null) this.currentScope = this.global
+        else this.currentScope = new Scope(this.currentScope)
+    }
+
+    static prevScope() {
+        if(this.currentScope.parent) this.currentScope = this.currentScope.parent
+    }
+
+    static reset() {
+        this.global = new Scope() 
+        this.currentScope = this.global
+    }
+}
+
+
 var grammar = {
-    "bnf": {
+    bnf: {
         //programa e bloco
         "<programa>" :[[ "PROGRAM IDENTIFICADOR PONTO_E_VIRGULA <bloco> PONTO", "console.log(this)" ]],
         "<bloco>" : [[ "<parte_de_declarações_de_variáveis> <bloco_1>", "" ],
@@ -18,26 +84,28 @@ var grammar = {
         "<parte_de_declarações_de_variáveis>" :[[ "<declaração_de_variáveis> PONTO_E_VIRGULA <parte_de_declarações_de_variáveis_1>", "" ]],
         "<parte_de_declarações_de_variáveis_1>" :[[ "<declaração_de_variáveis> PONTO_E_VIRGULA <parte_de_declarações_de_variáveis_1>", "" ],
                                                      ["", ""]],
-        "<declaração_de_variáveis>" :[[ "<tipo_simples> <lista_de_identificadores>", `console.log($1)` ]],
+        "<declaração_de_variáveis>" :[[ "<tipo_simples> <lista_de_identificadores>", `addVariables($1)` ]],
         "<tipo_simples>": [[ "INT", "" ],
                              ["REAL", ""],
                              ["BOOLEAN", ""]],
-        "<lista_de_identificadores>": [[ "IDENTIFICADOR <lista_de_identificadores_1>", "test($1)" ]],
-        "<lista_de_identificadores_1>": [["VIRGULA IDENTIFICADOR <lista_de_identificadores_1>", "test($2)"],
+        "<lista_de_identificadores>": [[ "IDENTIFICADOR <lista_de_identificadores_1>", "pushVariableInStack($1)" ]],
+        "<lista_de_identificadores_1>": [["VIRGULA IDENTIFICADOR <lista_de_identificadores_1>", "pushVariableInStack($2)"],
                                          ["", ""]],
          "<parte_de_declarações_de_subrotinas>": [["<declaração_de_procedimento> PONTO_E_VIRGULA <parte_de_declarações_de_subrotinas_1>", ""]],
          "<parte_de_declarações_de_subrotinas_1>": [["<declaração_de_procedimento> PONTO_E_VIRGULA", ""],
                                                   ["", ""]],
-         "<declaração_de_procedimento>": [["PROCEDURE IDENTIFICADOR PONTO_E_VIRGULA <bloco>", ""],
-                                         ["PROCEDURE IDENTIFICADOR <parâmetros_formais> PONTO_E_VIRGULA <bloco>", ""]],
+         "<procedure>": [["PROCEDURE", "newScope()"]],
+         "<declaração_de_procedimento>": [["<procedure> IDENTIFICADOR PONTO_E_VIRGULA <bloco>", ""],
+                                         ["<procedure> IDENTIFICADOR <parâmetros_formais> PONTO_E_VIRGULA <bloco>", ""]],
          "<parâmetros_formais>": [["ABR_PARENT <seção_de_parâmetros_formais> <parâmetros_formais_1> FECH_PARENT", ""]],
          "<parâmetros_formais_1>": [["", ""],
                                      ["PONTO_E_VIRGULA <seção_de_parâmetros_formais> <parâmetros_formais_1>", ""]],
          "<seção_de_parâmetros_formais>": [["VAR <lista_de_identificadores> DOIS_PONTOS <tipo_simples>", ""],
                                          ["<lista_de_identificadores> DOIS_PONTOS <tipo_simples>", ""]],
-        
+        "<begin>": [["COMANDO_BEGIN", ""]],
+        "<end>": [["COMANDO_END", "endScope()"]],
         //comandos
-        "<comando_composto>": [["COMANDO_BEGIN <comando> <comando_composto_1> COMANDO_END", "console.log('NOVO ESCOPO')"]],
+        "<comando_composto>": [["<begin> <comando> <comando_composto_1> <end>", ""]],
         "<comando_composto_1>": [["", ""],
                                  ["PONTO_E_VIRGULA <comando> <comando_composto_1>", ""]],
         "<comando>": [["<atribuição>", ""],
@@ -45,7 +113,7 @@ var grammar = {
                       ["<comando_composto>", ""],
                       ["<comando_condicional>", ""],
                      ["<comando_repetitivo>", ""]],
-        "<atribuição>": [["IDENTIFICADOR ATRIBUIÇÃO <expressão>", ""]],
+        "<atribuição>": [["IDENTIFICADOR ATRIBUIÇÃO <expressão>", "initializeVariable($1, $3);"]],
          "<chamada_de_procedimento>": [["IDENTIFICADOR <chamada_de_procedimento_1>", ""]],
          "<chamada_de_procedimento_1>": [["ABR_PARENT <lista_de_expressões> FECH_PARENT", ""],
                                          ["",""]],
@@ -86,13 +154,46 @@ var grammar = {
                                     ["VIRGULA <expressão> <lista_de_expressões_1>", ""]]
     },
     actionInclude: function () {
+        let variableStack = []
+
         function test(val) {
             console.log(val)
+        }
+
+        let pushVariableInStack = (name) => {
+            arguments[3]['parser'].variableStack.push(name)
+        }
+        
+        let addVariables = (type) => {
+            while(arguments[3]['parser'].variableStack.length) {
+                arguments[3]['parser'].Scope.currentScope.addVariable(type, arguments[3]['parser'].variableStack.pop())
+            }
+        }
+
+        let addExpressionStack = (element) => {
+            if(!this.test) this.test = []
+            this.test.push(element)
+        }
+
+        let initializeVariable = (name, type) => {
+            arguments[3]['parser'].Scope.currentScope.initializeVariable(name)
+            console.log(this['$1'])
+        }
+
+        let newScope = () => {
+            console.log("BEGIN")
+            arguments[3]['parser'].Scope.newScope()
+        }
+
+        let endScope = () => {
+            arguments[3]['parser'].Scope.prevScope()
         }
     }
 };
 
 var parser = new Parser(grammar);
+parser.variableStack = []
+parser.Scope = Scope
 var lexer = parser.lexer = new Lexer(function (char) {
     console.log("err")
 });
@@ -134,7 +235,8 @@ lexer.addRule(/program/, function(lexeme) {
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "PROGRAM"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -153,7 +255,8 @@ lexer.addRule(/;/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "PONTO_E_VIRGULA"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -169,7 +272,8 @@ lexer.addRule(/\./, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "PONTO"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -183,7 +287,8 @@ lexer.addRule(/:=/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"ATRIBUIÇÃO"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -352,7 +457,8 @@ lexer.addRule(/and/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_AND"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -366,7 +472,8 @@ lexer.addRule(/or/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_OR"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -380,7 +487,8 @@ lexer.addRule(/div/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_DIV"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -394,7 +502,8 @@ lexer.addRule(/not/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_NOT"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -408,7 +517,8 @@ lexer.addRule(/\(/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "ABR_PARENT"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -422,7 +532,8 @@ lexer.addRule(/\)/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "FECH_PARENT"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -436,7 +547,8 @@ lexer.addRule(/\+/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_SOMA"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -450,7 +562,8 @@ lexer.addRule(/\-/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_SUBTRAÇÃO"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -464,7 +577,8 @@ lexer.addRule(/\*/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol:"OP_MULTIPLICAÇÃO"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -478,7 +592,8 @@ lexer.addRule(/int/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "INT"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -492,7 +607,8 @@ lexer.addRule(/real/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REAL"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -506,7 +622,8 @@ lexer.addRule(/boolean/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "BOOLEAN"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -520,7 +637,8 @@ lexer.addRule(/>=/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REL_MAIOR_IGUAL"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -534,7 +652,8 @@ lexer.addRule(/<=/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REL_MENOR_IGUAL"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -548,7 +667,8 @@ lexer.addRule(/<>/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REL_DIFERENTE"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -562,7 +682,8 @@ lexer.addRule(/</, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REL_MENOR"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -576,7 +697,8 @@ lexer.addRule(/=/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REL_IGUAL"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -590,7 +712,8 @@ lexer.addRule(/>/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "REL_MAIOR"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -632,7 +755,8 @@ lexer.addRule(/[0-9]{1,10}/, function(lexeme){
         first_column: column,
         first_line: line,
         last_line: line,
-        last_column: column + lexeme.length
+        last_column: column + lexeme.length,
+        symbol: "NUMERO"
     };
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
@@ -675,7 +799,11 @@ function analise_sintatica(value){
     try{
         //console.log(value)
         //console.log(parser)
-        return {lexic: result, syntatic: parser.parse(value)};
+        parser.variableStack = []
+        Scope.reset()
+        let x = {lexic: result, syntatic: parser.parse(value)};
+        console.log(Scope.global)
+        return x;
     }
     catch(e){
         console.log(e)

@@ -15,16 +15,16 @@ class Scope {
         this.parent = parent
     }
 
-    addVariable(type, name, category = 'var'){
+    addVariable(type, name, line, category = 'var'){
         if(this.variableExists(name)) throw `variable ${name} already defined`
 
         this.variables[name] = {
             name,
             type,
             category,
+            line,
             initialized: false
         }
-        console.log(this.variables)
     }
 
     variableExists(name, checkParent = false){
@@ -34,6 +34,23 @@ class Scope {
         return false
     }
 
+    getVariable(name) {
+        if(this.variables[name] != undefined) return this.variables[name];
+
+        if(this.parent != null) return this.parent.getVariable(name)
+        return null
+    }
+
+    getUnitializedVariables() {
+        let result = []
+
+        for(variable of this.variables) {
+            if(!variable.initialized) result.push(variable)
+        }
+
+        return result
+    }
+
     initializeVariable(name) {
         if(this.variables[name]) {
             this.variables[name].initialized = true
@@ -41,17 +58,28 @@ class Scope {
         }
         else if(this.parent != null) return this.parent.initializeVariable(name)
 
-        throw `variable ${name} initialized but not defined`
+        throw `variable '${name}' not defined`
+    }
+
+    assertVariableInitialized(name) {
+        if(this.variables[name]) {
+            if(!this.variables[name].initialized) throw `variable ${name} used before initialization`
+            return true
+        }
+        if(this.parent != null) return this.parent.assertVariableInitialized(name, type)
+
+        throw `variable '${name}' not defined`
     }
 
     assertTypeCheck(name, type) {
         if(this.variables[name]) {
-            if(this.variables[name].type != type) throw `expected ${this.variables[name].type}, found ${type}`
+            if(this.variables[name].type != type) throw `expected '${this.variables[name].type}', found '${type}'`
+            console.log(type)
             return
         }
-        if(this.parent != null) return this.parent.variableTypeCheck(name, type)
+        if(this.parent != null) return this.parent.assertTypeCheck(name, type)
 
-        throw `variable ${name} not defined`
+        throw `variable '${name}' not defined`
     }
 
     static newScope() {
@@ -73,7 +101,7 @@ class Scope {
 var grammar = {
     bnf: {
         //programa e bloco
-        "<programa>" :[[ "PROGRAM IDENTIFICADOR PONTO_E_VIRGULA <bloco> PONTO", "console.log(this)" ]],
+        "<programa>" :[[ "PROGRAM IDENTIFICADOR PONTO_E_VIRGULA <bloco> PONTO", "" ]],
         "<bloco>" : [[ "<parte_de_declarações_de_variáveis> <bloco_1>", "" ],
                     [ "<parte_de_declarações_de_subrotinas> <comando_composto>", "" ],
                     [ "<comando_composto>", "" ]],
@@ -84,7 +112,7 @@ var grammar = {
         "<parte_de_declarações_de_variáveis>" :[[ "<declaração_de_variáveis> PONTO_E_VIRGULA <parte_de_declarações_de_variáveis_1>", "" ]],
         "<parte_de_declarações_de_variáveis_1>" :[[ "<declaração_de_variáveis> PONTO_E_VIRGULA <parte_de_declarações_de_variáveis_1>", "" ],
                                                      ["", ""]],
-        "<declaração_de_variáveis>" :[[ "<tipo_simples> <lista_de_identificadores>", `addVariables($1)` ]],
+        "<declaração_de_variáveis>" :[[ "<tipo_simples> <lista_de_identificadores>", `addVariables(this['_$'].first_line, $1)` ]],
         "<tipo_simples>": [[ "INT", "" ],
                              ["REAL", ""],
                              ["BOOLEAN", ""]],
@@ -144,6 +172,7 @@ var grammar = {
                          ["", ""]],
          "<fator>": [["<variável>", ""],
                      ["NUMERO", ""],
+                     ["BOOLEANO", ""],
                      ["ABR_PARENT <expressão> FECH_PARENT", ""],
                      ["OP_NOT <fator>", ""]],
         "<variável>": [["IDENTIFICADOR <variável_1>", ""]],
@@ -164,9 +193,9 @@ var grammar = {
             arguments[3]['parser'].variableStack.push(name)
         }
         
-        let addVariables = (type) => {
+        let addVariables = (line, type) => {
             while(arguments[3]['parser'].variableStack.length) {
-                arguments[3]['parser'].Scope.currentScope.addVariable(type, arguments[3]['parser'].variableStack.pop())
+                arguments[3]['parser'].Scope.currentScope.addVariable(type, arguments[3]['parser'].variableStack.pop(), line)
             }
         }
 
@@ -175,9 +204,25 @@ var grammar = {
             this.test.push(element)
         }
 
-        let initializeVariable = (name, type) => {
+        let initializeVariable = (name, value) => {
+            let type = "unknown"
+            let v = arguments[3]['parser'].Scope.currentScope.getVariable(name)
+            let variable = arguments[3]['parser'].Scope.currentScope.getVariable(value);
+            if(name != null && value == '-' || value == '+') {
+                type = v.type
+            }else if(value == "true" || value == "false"){
+                type = "boolean"
+            }else if(!isNaN(parseInt(value))) {
+                type = "int"
+            }else if(!isNaN(parseFloat(value))) {
+                type = "real"
+            }else if(arguments[3]['parser'].Scope.currentScope.assertVariableInitialized(value)){
+                console.log(variable)
+                type = variable.type
+            }
+            
+            arguments[3]['parser'].Scope.currentScope.assertTypeCheck(name, type)
             arguments[3]['parser'].Scope.currentScope.initializeVariable(name)
-            console.log(this['$1'])
         }
 
         let newScope = () => {
@@ -732,6 +777,22 @@ lexer.addRule(/[0-9]+(_|[a-z]|[A-Z])((_|[a-z]|[A-Z]|[0-9]))*/, function(lexeme){
     this.yylloc = this.yyloc;
     this.yylineno = this.yyloc.line;
     return "ERRO"
+})
+
+
+lexer.addRule(/(true|false)/, function(lexeme){
+    _addResult(lexeme, "BOOLEANO", line, column)
+    this.yytext = lexeme;
+    this.yyloc = {
+        first_column: column,
+        first_line: line,
+        last_line: line,
+        last_column: column + lexeme.length,
+        symbol: "BOOLEANO"
+    };
+    this.yylloc = this.yyloc;
+    this.yylineno = this.yyloc.line;
+    return "BOOLEANO"
 })
 
 lexer.addRule(/(_|[a-z]|[A-Z])((_|[a-z]|[A-Z]|[0-9]))*/, function(lexeme){

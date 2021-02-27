@@ -23,7 +23,53 @@
         <div>
             <h3 id="syntatic-result" style="margin-left: 10px;"></h3>
         </div>
+
         <div>
+            <h3>Tabela de erros semânticos</h3>
+            <div id="semantic-error-table" class="table">
+                <div class="table-header">
+                    <p>Linha</p>
+                    <p>Erro</p>
+                </div>
+                <div id="semantic-error-table-body" class="table-body">
+                </div>
+            </div>
+        </div>
+        <div id="semantic-error-content-clone" style="display: none;">
+            <div class="table-row">
+                <p id="line"></p>
+                <p id="error"></p>
+            </div>
+        </div>
+
+        <div style="margin-top: 24px">
+            <h3>Tabela de símbolos - Análise Semântica</h3>
+            <div id="semantic-table" class="table">
+                <div class="table-header">
+                    <p>Nome</p>
+                    <p>Tipo</p>
+                    <p>Categoria</p>
+                    <p>Linha</p>
+                    <p>Escopo</p>
+                    <p>Utilizada</p>
+                </div>
+                <div id="semantic-table-body" class="table-body">
+                </div>
+            </div>
+        </div>
+        <div id="semantic-content-clone" style="display: none;">
+            <div class="table-row">
+                <p id="name"></p>
+                <p id="type"></p>
+                <p id="category"></p>
+                <p id="line"></p>
+                <p id="scope"></p>
+                <p id="used"></p>
+            </div>
+        </div>
+
+        <div style="margin-top: 24px">
+            <h3>Tabela de Lexemas - Análise Léxica</h3>
             <div id="table" class="table">
                 <div class="table-header">
                     <p>Lexema</p>

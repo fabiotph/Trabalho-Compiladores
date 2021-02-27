@@ -22,7 +22,8 @@ class Scope {
     }
 
     addVariable(type, name, line, category = 'var'){
-        if(this.variableExists(name)) throw `variable ${name} already defined`
+        if(this.variableExists(name)) throw `variable with '${name}' already defined`
+        if(this.procedureExists(name)) throw `procedure with '${name}' already defined`
 
         this.variables[name] = {
             name,
@@ -35,7 +36,8 @@ class Scope {
     }
 
     addProcedure(name, params, line) {
-        if(this.variableExists(name)) throw `variable ${name} already defined`
+        if(this.variableExists(name)) throw `variable with '${name}' already defined`
+        if(this.procedureExists(name)) throw `procedure with '${name}' already defined`
 
         this.procedures[name] = {
             line,
@@ -47,6 +49,13 @@ class Scope {
         if(this.variables[name] != undefined) return true;
 
         if(checkParent && this.parent != null) return this.parent.variableExists(name, checkParent)
+        return false
+    }
+
+    procedureExists(name, checkParent = false){
+        if(this.procedures[name] != undefined) return true;
+
+        if(checkParent && this.parent != null) return this.parent.procedureExists(name, checkParent)
         return false
     }
 
@@ -89,7 +98,7 @@ class Scope {
 
     assertVariableInitialized(name) {
         if(this.variables[name]) {
-            if(!this.variables[name].initialized) throw `variable ${name} used before initialization`
+            if(!this.variables[name].initialized) throw `variable '${name}' used before initialization`
             return true
         }else if(this.type == 'procedure') {
             return true
@@ -146,14 +155,15 @@ class Scope {
         return result
     }
 
-    getProcedures() {
+    getProcedures(level = 0) {
         let result = []
-        for(let subScope of this.childScopes){
-            result.push(...subScope.getProcedures())
-        }
-
+        
         for(let procedure in this.procedures) {
-            result.push(this.procedures[procedure])
+            result.push({name: procedure, level, ...this.procedures[procedure]} )
+        }
+        
+        for(let subScope of this.childScopes){
+            result.push(...subScope.getProcedures(level + 1))
         }
 
         return result
@@ -1083,7 +1093,7 @@ function analise_sintatica(value){
         }};
         for(let variable of Scope.global.getUnusedVariables()) {
             parser.errorStack.push({
-                error: `variable ${variable.name} defined but not used`,
+                error: `variable '${variable.name}' defined but not used`,
                 line: variable.line
             })
         }

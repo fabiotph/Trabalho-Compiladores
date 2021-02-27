@@ -20,10 +20,12 @@ let exec = async () => {
 
     console.log(result)
     printResult(result.lexic)
+    printResultSemantic(result.semantic)
+    printResultSemanticError(result.semantic)
     if (result.syntatic === true) {
         document.querySelector('#syntatic-result').innerHTML = "A análise sintática foi concluída com sucesso"
     } else {
-        document.querySelector('#syntatic-result').innerHTML = "A análise sintática foi concluída com erros"
+        document.querySelector('#syntatic-result').innerHTML = `A análise sintática foi concluída com erros. Erro na linha ${result.syntatic.loc.first_line}, token ${result.syntatic.token} inesperado`
     }
 }
 
@@ -32,16 +34,60 @@ let changeInput = (value) => {
 }
 
 let printResult = (result) => {
-    console.log(result)
     _resetTable()
     for (let line of result) {
-        console.log(line)
         _makeTable(line)
+    }
+}
+
+let printResultSemantic = (result) => {
+    _resetSemanticTable()
+    for (let line of result.variables) {
+        _makeSemanticTable(line)
+    }
+
+    for (let line of result.procedures) {
+        _makeSemanticTable(line)
+    }
+}
+
+let printResultSemanticError = (result) => {
+    _resetSemanticErrorTable()
+    for (let line of result.errorStack) {
+        _makeSemanticErrorTable(line)
     }
 }
 
 let _resetTable = () => {
     document.querySelector('#table-body').innerHTML = ""
+}
+
+let _resetSemanticTable = () => {
+    document.querySelector('#semantic-table-body').innerHTML = ""
+}
+
+let _resetSemanticErrorTable = () => {
+    document.querySelector('#semantic-error-table-body').innerHTML = ""
+}
+
+let _makeSemanticErrorTable = (values) => {
+    let clone = document.querySelector('#semantic-error-content-clone').cloneNode(true)
+    let tableBody = document.querySelector('#semantic-error-table-body')
+    clone.querySelector('#line').innerHTML = values.line
+    clone.querySelector('#error').innerHTML = values.error
+    tableBody.innerHTML += clone.innerHTML
+}
+
+let _makeSemanticTable = (values) => {
+    let clone = document.querySelector('#semantic-content-clone').cloneNode(true)
+    let tableBody = document.querySelector('#semantic-table-body')
+    clone.querySelector('#name').innerHTML = values.name
+    clone.querySelector('#type').innerHTML = values.type ? values.type : "-"
+    clone.querySelector('#category').innerHTML = values.category ?  values.category : "procedure"
+    clone.querySelector('#line').innerHTML = values.line
+    clone.querySelector('#scope').innerHTML = values.level
+    clone.querySelector('#used').innerHTML = values.used !== undefined ? values.used : "-"
+    tableBody.innerHTML += clone.innerHTML
 }
 
 let _makeTable = (values) => {

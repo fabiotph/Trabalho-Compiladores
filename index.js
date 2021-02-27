@@ -89,8 +89,9 @@ class Scope {
             this.variables[name].used = true
             return
         }else if(this.type == 'procedure') {
-            let v = this.getVariable(v)
+            let v = this.getVariable(name)
             if(v == null) throw `variable '${name}' not defined`
+            return
         }else if(this.parent != null) return this.parent.initializeVariable(name)
 
         throw `variable '${name}' not defined`
@@ -298,15 +299,15 @@ var grammar = {
         }
         
         let addVariables = (line, type) => {
-            try{
-                while(arguments[3]['parser'].variableStack.length) {
+            while(arguments[3]['parser'].variableStack.length) {
+                try{
                     arguments[3]['parser'].Scope.currentScope.addVariable(type, arguments[3]['parser'].variableStack.pop(), line)
+                }catch(e){
+                    arguments[3]['parser'].errorStack.push({
+                        error: e,
+                        line
+                    })
                 }
-            }catch(e){
-                arguments[3]['parser'].errorStack.push({
-                    error: e,
-                    line
-                })
             }
         }
 
@@ -361,7 +362,7 @@ var grammar = {
             try{
                 let v = arguments[3]['parser'].Scope.currentScope.getVariable(name)
                 let variable = arguments[3]['parser'].Scope.currentScope.getVariable(value);
-                if(name != null && value == '-' || value == '+') {
+                if(v != null && name != null && value == '-' || value == '+') {
                     type = v.type
                 }else if(value == "true" || value == "false"){
                     type = "boolean"
